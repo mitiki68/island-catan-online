@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Island Catan Online</title>
+<style>
+:root{color-scheme:dark;--bg:#101820;--panel:#1c2934;--line:#344653;--text:#f2f5f7;--muted:#a8b8c3;--accent:#5ad1a0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,sans-serif}
+main{max-width:900px;margin:auto;padding:16px 12px 32px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}h1{font-size:22px;margin:0}h2{font-size:16px;margin:0 0 10px}.muted{color:var(--muted);font-size:13px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:13px;margin:10px 0}
+input,button,select{font:inherit;border-radius:10px;border:1px solid var(--line);padding:11px;background:#111c25;color:var(--text);max-width:100%}button{cursor:pointer;font-weight:650}button.primary{background:var(--accent);color:#10231b;border-color:var(--accent)}button:disabled{opacity:.4;cursor:not-allowed}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}.hidden{display:none!important}
+#board{width:100%;height:auto;display:block;touch-action:manipulation}.resourcegrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.res{background:#111c25;border-radius:10px;padding:8px 3px;text-align:center;font-size:13px}.res strong{display:block;font-size:18px}.players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.player{padding:9px;border:1px solid var(--line);border-radius:10px;min-width:0}.player.current{border-color:var(--accent)}.log{font-size:13px;line-height:1.55;max-height:150px;overflow:auto}.status{padding:9px;border-radius:10px;background:#111c25;margin:8px 0}.smallbtn{padding:8px 9px;font-size:13px}.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.actions button{padding:10px 4px;font-size:13px}.notice{color:#ffda8a;font-size:13px;margin-top:8px}
+@media(max-width:480px){main{padding:12px 9px 25px}h1{font-size:19px}.panel{padding:10px}.actions{grid-template-columns:repeat(2,minmax(0,1fr))}.resourcegrid{gap:3px}.res{font-size:11px}.res strong{font-size:17px}}
+</style>
+</head>
+<body><main>
+<header class="top"><div><h1>🏝️ Island Catan Online</h1><div class="muted">招待コード式 · 最大4人 · スマホ対応</div></div><button id="copyInvite" class="smallbtn hidden">招待URLをコピー</button></header>
+<section id="setup" class="panel">
+<h2>オンラインルーム</h2>
+<p class="muted">SupabaseのURLと公開anon keyを設定してから使ってね。設定方法はREADME.mdを参照。</p>
+<label class="muted" for="playerName">プレイヤー名</label><input id="playerName" maxlength="18" placeholder="名前" style="width:100%;margin:4px 0 10px">
+<div class="row"><button id="createRoom" class="primary">部屋を作る</button><input id="roomCode" maxlength="6" placeholder="招待コード" autocapitalize="characters" style="text-transform:uppercase;min-width:100px"><button id="joinRoom">参加</button></div>
+<div id="setupMsg" class="notice"></div>
+</section>
+<section id="game" class="hidden">
+<div class="panel"><div class="row" style="align-items:center"><div><div class="muted">ルームコード</div><div id="roomLabel" style="font-size:23px;font-weight:800;letter-spacing:3px">------</div></div><div><div class="muted">ゲーム状態</div><strong id="phaseLabel">ロビー</strong></div><button id="leaveRoom" class="smallbtn">退出</button></div><div id="lobbyMsg" class="muted" style="margin-top:8px"></div><div class="row" style="margin-top:10px"><button id="startGame" class="primary">ゲーム開始（ホスト）</button><button id="copyCode" class="smallbtn">コードをコピー</button></div></div>
+<div class="panel"><div class="row" style="align-items:center;justify-content:space-between"><h2>島の盤面</h2><span class="muted" id="turnLabel">ロビー</span></div><svg id="board" viewBox="0 0 360 330" aria-label="六角形の島。建設モードで頂点や辺をタップ"></svg><div class="muted">建設モードを選んでから、盤面の青い頂点・辺をタップ。盗賊が出たら地形をタップ。</div></div>
+<div class="panel"><h2>あなたの資源</h2><div id="resources" class="resourcegrid"></div><div id="handHint" class="muted" style="margin-top:8px"></div></div>
+<div class="panel"><h2>操作</h2><div class="row"><button id="roll" class="primary">🎲 サイコロを振る</button><button id="endTurn">手番を終了</button></div><div class="actions" style="margin-top:9px"><button data-mode="road">🛤️ 道路<br>木材1・レンガ1</button><button data-mode="settlement">🏠 開拓地<br>各資源1</button><button data-mode="city">🏙️ 都市<br>小麦2・鉱石3</button><button id="buyDev">🃏 発展カード<br>羊毛・小麦・鉱石</button><button id="bankTrade">🔄 銀行交換 4:1</button><button id="playDev">✨ カードを使う</button></div><div id="tradePanel" class="hidden" style="margin-top:10px"><div class="row"><select id="giveResource"></select><select id="getResource"></select><button id="tradeDo">交換</button></div></div><div id="gameMsg" class="status">部屋を作成または参加してね。</div></div>
+<div class="panel"><h2>プレイヤー</h2><div id="players" class="players"></div></div>
+<div class="panel"><h2>ゲームログ</h2><div id="log" class="log"></div></div>
+</section>
+<div class="muted" style="padding:8px 2px">試作版：オンライン同期の基本実装です。公式ルール完全再現ではありません。共有ルームの書き込み権限はデモ用のため、本格公開前にサーバー側検証を追加してください。</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(() => {
+const $=id=>document.getElementById(id);
+const RES=['木材','レンガ','羊毛','小麦','鉱石'],EM=['🌲','🧱','🐑','🌾','⛰️'];
+const TYPES=['forest','hill','pasture','field','mountain','desert'],EMO={forest:'🌲',hill:'🧱',pasture:'🐑',field:'🌾',mountain:'⛰️',desert:'🏜️'};
+const COLORS=['#38a169','#e45e56','#e4ad36','#6698e8'],PN=['木材','レンガ','羊毛','小麦','鉱石'];
+const TILECOL={forest:'#8fbf8b',hill:'#d99a82',pasture:'#c7d99c',field:'#ead17d',mountain:'#a9bfce',desert:'#e9c99a'};
+const COST={road:[1,1,0,0,0],settlement:[1,1,1,1,0],city:[0,0,0,2,3],dev:[0,0,1,1,1]};
+let sb=null,room=null,me=null,channel=null,mode=null,tradeOpen=false;
+let config={url:localStorage.getItem('catan_sb_url')||'',key:localStorage.getItem('catan_sb_key')||''};
+function cfg(){if(!config.url||!config.key){const u=prompt('Supabase Project URL（https://....supabase.co）');if(!u)return false;const k=prompt('Supabase anon/public key');if(!k)return false;config={url:u.trim(),key:k.trim()};localStorage.setItem('catan_sb_url',config.url);localStorage.setItem('catan_sb_key',config.key)}try{sb=window.supabase.createClient(config.url,config.key);return true}catch(e){alert('設定を確認してね: '+e.message);return false}}
+function msg(s){$('gameMsg').textContent=s}
+function log(s){if(!room)return;room.state.log=[s,...(room.state.log||[])].slice(0,30)}
+function makeBoard(){
+ const coords=[];for(let q=-2;q<=2;q++)for(let r=-2;r<=2;r++)if(Math.max(Math.abs(q),Math.abs(r),Math.abs(q+r))<=2)coords.push([q,r]);
+ const terrain=[...TYPES.slice(0,5),...TYPES.slice(0,5),...TYPES.slice(0,5),...TYPES.slice(0,4)];terrain.sort(()=>Math.random()-.5);
+ let nums=[2,3,3,4,4,5,5,6,6,8,8,9,9,10,10,11,11,12].sort(()=>Math.random()-.5);
+ const tiles=coords.map(([q,r],i)=>({id:i,q,r,type:terrain[i],num:terrain[i]==='desert'?null:nums.pop(),robber:terrain[i]==='desert'}));
+ const vertices=[],edges=[],vm={},em={};
+ const center=(q,r)=>({x:180+42*(Math.sqrt(3)*q+Math.sqrt(3)/2*r),y:163+42*1.5*r});
+ tiles.forEach(t=>{let c=center(t.q,t.r);t.cx=c.x;t.cy=c.y;t.vs=[];for(let k=0;k<6;k++){let a=Math.PI/180*(60*k-30),x=c.x+42*Math.cos(a),y=c.y+42*Math.sin(a),key=Math.round(x*10)+','+Math.round(y*10);if(vm[key]===undefined){vm[key]=vertices.length;vertices.push({id:vertices.length,x,y,building:null,edges:[],adj:[],tiles:[]})}t.vs.push(vm[key])}for(let k=0;k<6;k++){let a=t.vs[k],b=t.vs[(k+1)%6],key=Math.min(a,b)+'-'+Math.max(a,b);if(em[key]===undefined){em[key]=edges.length;edges.push({id:edges.length,a,b,owner:null})}let ei=em[key];vertices[a].edges.push(ei);vertices[b].edges.push(ei);vertices[a].adj.push(b);vertices[b].adj.push(a)}});tiles.forEach(t=>t.vs.forEach(v=>vertices[v].tiles.push(t.id)));
+ return {tiles,vertices,edges};
+}
+function newState(){
+ const b=makeBoard(),players=Array.from({length:4},(_,i)=>({id:null,name:'空席',color:COLORS[i],res:[0,0,0,0,0],roads:[],settlements:[],cities:[],dev:[],points:0,knights:0,bonus:0,usedDev:false}));
+ return {...b,players,turn:0,phase:'lobby',rolled:false,dice:'—',mode:null,robberMode:false,log:['部屋を作ったよ。友達の参加を待とう。'],winner:null,host:null,devDeck:['knight','knight','knight','knight','knight','knight','knight','knight','knight','knight','knight','knight','knight','knight','knight','road','road','road','road','year','year','year','point','point','point','point','point'].sort(()=>Math.random()-.5),longest:null,largest:null};
+}
+function total(p){return p.res.reduce((a,b)=>a+b,0)}
+function costOK(p,c){return c.every((n,i)=>p.res[i]>=n)}
+function pay(p,c){c.forEach((n,i)=>p.res[i]-=n)}
+function meIndex(){return room?.state.players.findIndex(p=>p.id===me)??-1}
+function current(){return room.state.players[room.state.turn]}
+function connected(v,p){return v.edges.some(e=>room.state.edges[e].owner===p)||v.adj.some(n=>room.state.vertices[n].building?.owner===p)}
+function canRoad(e,p){const x=room.state.edges[e];return x.owner===null&&[x.a,x.b].some(i=>{const v=room.state.vertices[i];return v.edges.some(ei=>room.state.edges[ei].owner===p)||v.building?.owner===p})}
+function canSettle(v,p){const x=room.state.vertices[v];return !x.building&&x.adj.every(n=>!room.state.vertices[n].building)&&connected(x,p)}
+function canCity(v,p){const x=room.state.vertices[v];return x.building?.owner===p&&x.building.type==='settlement'}
+function updatePoints(p){const x=room.state.players[p];x.points=x.settlements.length+x.cities.length*2+x.bonus}
+function checkWin(){let i=room.state.players.findIndex(p=>p.points>=10);if(i>=0){room.state.winner=i;room.state.phase='over';log('🏆 '+room.state.players[i].name+' が勝利！');return true}return false}
+function buildRoad(e,p,free=false){const s=room.state;if(!canRoad(e,p)||(!free&&!costOK(s.players[p],COST.road)))return false;if(!free)pay(s.players[p],COST.road);s.edges[e].owner=p;s.players[p].roads.push(e);return true}
+function buildSettle(v,p,free=false){const s=room.state;if(!canSettle(v,p)||(!free&&!costOK(s.players[p],COST.settlement)))return false;if(!free)pay(s.players[p],COST.settlement);s.vertices[v].building={owner:p,type:'settlement'};s.players[p].settlements.push(v);updatePoints(p);return true}
+function buildCity(v,p){const s=room.state;if(!canCity(v,p)||!costOK(s.players[p],COST.city))return false;pay(s.players[p],COST.city);s.vertices[v].building.type='city';s.players[p].settlements=s.players[p].settlements.filter(x=>x!==v);s.players[p].cities.push(v);updatePoints(p);return true}
+function resourceProduction(d){const s=room.state;s.tiles.forEach(t=>{if(t.num!==d||t.robber)return;const ri={forest:0,hill:1,pasture:2,field:3,mountain:4}[t.type];if(ri===undefined)return;t.vs.forEach(vi=>{const b=s.vertices[vi].building;if(b)s.players[b.owner].res[ri]+=b.type==='city'?2:1})})}
+function moveRobber(tid,p){const s=room.state;s.tiles.forEach(t=>t.robber=false);s.tiles[tid].robber=true;s.robberMode=false;const victims=[...new Set(s.tiles[tid].vs.map(v=>s.vertices[v].building).filter(b=>b&&b.owner!==p).map(b=>b.owner))].filter(i=>total(s.players[i])>0);if(victims.length){const v=victims[Math.floor(Math.random()*victims.length)],pool=[];s.players[v].res.forEach((n,i)=>{for(let j=0;j<n;j++)pool.push(i)});if(pool.length){const r=pool[Math.floor(Math.random()*pool.length)];s.players[v].res[r]--;s.players[p].res[r]++;log(s.players[p].name+' が '+s.players[v].name+' から資源を奪った')}}log('盗賊を移動した。')}
+function rollDice(){const s=room.state;if(s.turn!==meIndex()||s.rolled||s.phase!=='playing')return;const d=1+Math.floor(Math.random()*6)+1+Math.floor(Math.random()*6);s.dice=String(d);s.rolled=true;s.usedDev=false;if(d===7){s.players.forEach(p=>{if(total(p)>7){let n=Math.floor(total(p)/2);while(n--)dropRandom(p)}});s.robberMode=true;log('7！盗賊を移動してね。')}else{resourceProduction(d);log('出目 '+d+'：資源を生産したよ。')} }
+function dropRandom(p){let pool=[];p.res.forEach((n,i)=>{for(let j=0;j<n;j++)pool.push(i)});if(pool.length)p.res[pool[Math.floor(Math.random()*pool.length)]]--}
+function longestRoad(p){const s=room.state;let best=0;function dfs(v,used,d){best=Math.max(best,d);for(const ei of s.vertices[v].edges){if(s.edges[ei].owner!==p||used.has(ei))continue;const e=s.edges[ei],n=e.a===v?e.b:e.a;if(s.vertices[n].building&&s.vertices[n].building.owner!==p){best=Math.max(best,d+1);continue}used.add(ei);dfs(n,used,d+1);used.delete(ei)}}s.vertices.forEach(v=>dfs(v.id,new Set(),0));return best}
+function bonusCheck(){const s=room.state;const lengths=s.players.map((p,i)=>longestRoad(i)),m=Math.max(...lengths);if(m>=5){const lead=lengths.map((n,i)=>n===m?i:-1).filter(i=>i>=0);if(lead.length===1&&lead[0]!==s.longest){if(s.longest!==null){s.players[s.longest].bonus-=2;updatePoints(s.longest)}s.longest=lead[0];s.players[lead[0]].bonus+=2;updatePoints(lead[0]);log(s.players[lead[0]].name+' が最長交易路を獲得！')}}const ks=s.players.map(p=>p.knights),km=Math.max(...ks);if(km>=3){const lead=ks.map((n,i)=>n===km?i:-1).filter(i=>i>=0);if(lead.length===1&&lead[0]!==s.largest){if(s.largest!==null){s.players[s.largest].bonus-=2;updatePoints(s.largest)}s.largest=lead[0];s.players[lead[0]].bonus+=2;updatePoints(lead[0]);log(s.players[lead[0]].name+' が最大騎士力を獲得！')}}}
+async function save(){const {error}=await sb.from('catan_rooms').update({state:room.state,updated_at:new Date().toISOString()}).eq('code',room.code);if(error){msg('保存エラー: '+error.message);return}render()}
+async function transact(fn){if(!room||room.state.winner!==null)return;const idx=meIndex();if(idx<0||room.state.turn!==idx)return;try{fn();bonusCheck();checkWin();await save()}catch(e){msg('操作エラー: '+e.message)}}
+async function createRoom(){
+ if(!cfg())return;const name=$('playerName').value.trim()||'プレイヤー';me=crypto.randomUUID();let state=newState();state.players[0]={...state.players[0],id:me,name};state.host=me;
+ // Host starts with one settlement and road as a tutorial-friendly initial state.
+ const p=state.players[0];const v=state.vertices.filter(v=>v.adj.every(n=>!state.vertices[n].building)).sort((a,b)=>scoreStateVertex(state,b)-scoreStateVertex(state,a))[0];if(v){v.building={owner:0,type:'settlement'};p.settlements.push(v.id);p.points=1;const e=v.edges.find(e=>state.edges[e].owner===null);if(e!==undefined){state.edges[e].owner=0;p.roads.push(e)}}
+ for(let i=0;i<4;i++)state.players[i].res=[1,1,1,1,0];
+ let code;for(let tries=0;tries<5;tries++){code=Math.random().toString(36).slice(2,8).toUpperCase();const {data}=await sb.from('catan_rooms').select('code').eq('code',code).maybeSingle();if(!data)break}
+ const {data,error}=await sb.from('catan_rooms').insert({code,host_id:me,state}).select().single();if(error){$('setupMsg').textContent='部屋作成エラー: '+error.message;return}room=data;enterRoom();await subscribe();
+}
+function scoreStateVertex(s,v){return v.tiles.reduce((sum,ti)=>{let n=s.tiles[ti].num;return sum+(n?6-Math.abs(7-n):0)},0)}
+async function joinRoom(){
+ if(!cfg())return;const code=$('roomCode').value.trim().toUpperCase();if(code.length<4){$('setupMsg').textContent='招待コードを入力してね。';return}
+ const {data,error}=await sb.from('catan_rooms').select('*').eq('code',code).maybeSingle();if(error||!data){$('setupMsg').textContent='部屋が見つからないよ。コードを確認してね。';return}
+ const name=$('playerName').value.trim()||'プレイヤー';const idx=data.state.players.findIndex(p=>!p.id);if(idx<0){$('setupMsg').textContent='この部屋は満員だよ（最大4人）。';return}
+ me=crypto.randomUUID();data.state.players[idx].id=me;data.state.players[idx].name=name;
+ const {data:updated,error:err}=await sb.from('catan_rooms').update({state:data.state}).eq('code',code).eq('updated_at',data.updated_at).select().maybeSingle();
+ if(err||!updated){$('setupMsg').textContent='参加に失敗したよ。もう一度試してね。';return}
+ room=updated;enterRoom();await subscribe();
+}
+function enterRoom(){$('setup').classList.add('hidden');$('game').classList.remove('hidden');$('roomLabel').textContent=room.code;$('copyInvite').classList.remove('hidden');$('giveResource').innerHTML=RES.map((x,i)=>`<option value="${i}">${EM[i]} ${x}</option>`).join('');$('getResource').innerHTML=$('giveResource').innerHTML;$('getResource').value='1';render();msg('参加したよ。ホストがゲームを開始するまで待ってね。')}
+async function subscribe(){if(channel)await sb.removeChannel(channel);channel=sb.channel('room-'+room.code).on('postgres_changes',{event:'UPDATE',schema:'public',table:'catan_rooms',filter:'code=eq.'+room.code},payload=>{if(payload.new&&payload.new.state){room=payload.new;render()}}).subscribe(status=>{if(status==='SUBSCRIBED')msg('オンライン同期中')});}
+function renderBoard(){const s=room.state,svg=$('board');let out='';s.tiles.forEach(t=>{const pts=[];for(let k=0;k<6;k++){const a=Math.PI/180*(60*k-30);pts.push((t.cx+42*Math.cos(a))+','+(t.cy+42*Math.sin(a)))}out+=`<polygon points="${pts.join(' ')}" fill="${TILECOL[t.type]}" stroke="#f5f0df" stroke-width="2"/>`;out+=`<text x="${t.cx}" y="${t.cy-6}" text-anchor="middle" font-size="16">${EMO[t.type]}</text>`;if(t.num)out+=`<circle cx="${t.cx}" cy="${t.cy+12}" r="10" fill="${[6,8].includes(t.num)?'#e5a99c':'#fff8e7'}"/><text x="${t.cx}" y="${t.cy+16}" text-anchor="middle" font-size="11" font-weight="bold" fill="#352d26">${t.num}</text>`;if(t.robber)out+=`<text x="${t.cx}" y="${t.cy+1}" text-anchor="middle" font-size="20">🦹</text>`});
+ s.edges.forEach(e=>{const a=s.vertices[e.a],b=s.vertices[e.b],legal=s.turn===meIndex()&&s.rolled&&(mode==='road'||mode==='freeRoad')&&canRoad(e.id,meIndex());out+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${e.owner!==null?s.players[e.owner].color:(legal?'#1678ff':'#f7f2e4')}" stroke-width="${e.owner!==null?5:(legal?5:2)}" stroke-linecap="round" data-edge="${e.id}"/>`});
+ s.vertices.forEach(v=>{const b=v.building,legal=s.turn===meIndex()&&s.rolled&&((mode==='settlement'&&canSettle(v.id,meIndex()))||(mode==='city'&&canCity(v.id,meIndex())));if(b){const c=s.players[b.owner].color;if(b.type==='city')out+=`<rect x="${v.x-7}" y="${v.y-7}" width="14" height="14" rx="2" fill="${c}" stroke="#fff" stroke-width="1.5"/>`;else out+=`<path d="M${v.x-7},${v.y+5} L${v.x-7},${v.y-3} L${v.x},${v.y-9} L${v.x+7},${v.y-3} L${v.x+7},${v.y+5} Z" fill="${c}" stroke="#fff" stroke-width="1.4"/>`}else out+=`<circle cx="${v.x}" cy="${v.y}" r="${legal?7:3}" fill="${legal?'#1678ff':'#fff8e5'}" stroke="${legal?'white':'#9a8b71'}" stroke-width="1.5"/>`});
+ svg.innerHTML=out;
+ svg.querySelectorAll('[data-edge]').forEach(el=>el.addEventListener('click',()=>onEdge(+el.dataset.edge)));
+ s.vertices.forEach(v=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',v.x);c.setAttribute('cy',v.y);c.setAttribute('r',10);c.setAttribute('fill','transparent');c.style.cursor='pointer';c.addEventListener('click',()=>onVertex(v.id));svg.appendChild(c)});
+ s.tiles.forEach(t=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',t.cx);c.setAttribute('cy',t.cy);c.setAttribute('r',26);c.setAttribute('fill','transparent');c.addEventListener('click',()=>{if(s.robberMode&&s.turn===meIndex())transact(()=>moveRobber(t.id,meIndex()))});svg.appendChild(c)});
+}
+async function onEdge(e){const idx=meIndex();if(idx<0||room.state.turn!==idx||!room.state.rolled)return;await transact(()=>{if(mode==='road'){if(!buildRoad(e,idx))throw Error('そこには道路を建設できないか、資源が足りないよ。');log('道路を建設した。');mode=null}else msg('道路を建設するモードを選んでね。')})}
+async function onVertex(v){const idx=meIndex();if(idx<0||room.state.turn!==idx||!room.state.rolled)return;await transact(()=>{if(mode==='settlement'){if(!buildSettle(v,idx))throw Error('そこには開拓地を建設できないよ。');log('開拓地を建設した。');mode=null}else if(mode==='city'){if(!buildCity(v,idx))throw Error('都市には小麦2・鉱石3が必要。');log('都市を建設した。');mode=null}else msg('建設モードを選んでね。')})}
+function render(){if(!room)return;const s=room.state,idx=meIndex(),p=s.players[idx];$('roomLabel').textContent=room.code;$('phaseLabel').textContent=({lobby:'参加待ち',playing:'対戦中',over:'ゲーム終了'})[s.phase]||s.phase;$('turnLabel').textContent=s.winner!==null?'勝者：'+s.players[s.winner].name:(s.turn===idx?'あなたの手番':'手番：'+(s.players[s.turn]?.name||'—'));$('lobbyMsg').textContent=s.players.filter(x=>x.id).length+' / 4 人が参加中。'+(s.phase==='lobby'?'ホストがゲームを開始できるよ。':'');$('startGame').disabled=s.host!==me||s.phase!=='lobby'||s.players.filter(x=>x.id).length<2;$('startGame').textContent=s.phase==='lobby'?'ゲーム開始（ホスト）':'ゲーム開始済み';$('roll').disabled=s.turn!==idx||s.rolled||s.phase!=='playing'||s.winner!==null;$('endTurn').disabled=s.turn!==idx||!s.rolled||s.phase!=='playing';$('resources').innerHTML=RES.map((n,i)=>`<div class="res">${EM[i]} ${n}<strong>${p?p.res[i]:0}</strong></div>`).join('');$('handHint').textContent=p?'資源 '+total(p)+' 枚 · 勝利点 '+p.points+' / 10':'参加情報を読み込み中';$('players').innerHTML=s.players.map((x,i)=>`<div class="player ${i===s.turn?'current':''}"><div style="display:flex;gap:7px;align-items:center"><span style="width:11px;height:11px;border-radius:50%;background:${x.color};display:inline-block"></span><strong style="overflow-wrap:anywhere">${x.name}</strong></div><div class="muted">${x.id?'参加済み':'空席'} · ${x.points}点</div><div class="muted">🏠 ${x.settlements.length} 🏙️ ${x.cities.length} 🛤️ ${x.roads.length}</div></div>`).join('');$('log').innerHTML=(s.log||[]).map(x=>`<div>• ${String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`).join('');$('gameMsg').textContent=s.winner!==null?'ゲーム終了！ '+s.players[s.winner].name+' の勝利！':s.robberMode&&s.turn===idx?'盗賊を移動する地形をタップしてね。':s.turn===idx?(s.rolled?'建設や交換をして、手番を終了しよう。':'サイコロを振ってね。'):'他のプレイヤーの手番だよ。';$('tradePanel').classList.toggle('hidden',!tradeOpen);document.querySelectorAll('[data-mode]').forEach(b=>{b.classList.toggle('primary',mode===b.dataset.mode);b.disabled=s.turn!==idx||!s.rolled||s.phase!=='playing'||s.winner!==null});$('buyDev').disabled=s.turn!==idx||!s.rolled||!costOK(p||{res:[]},COST.dev)||!s.devDeck.length;$('playDev').disabled=s.turn!==idx||!s.rolled||!p||!p.dev.some(c=>c!=='point');renderBoard()}
+$('createRoom').onclick=createRoom;$('joinRoom').onclick=joinRoom;$('roomCode').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''));
+$('startGame').onclick=async()=>{if(!room||room.state.host!==me||room.state.phase!=='lobby')return;const s=room.state;s.phase='playing';log('ゲーム開始！最初のプレイヤーからサイコロを振ろう。');await save()};
+$('roll').onclick=()=>transact(()=>rollDice());
+$('endTurn').onclick=async()=>{const s=room.state,idx=meIndex();if(s.turn!==idx||!s.rolled)return;await transact(()=>{s.turn=(s.turn+1)%s.players.length;let guard=0;while(!s.players[s.turn].id&&guard++<4)s.turn=(s.turn+1)%s.players.length;s.rolled=false;s.robberMode=false;mode=null;log(s.players[s.turn].name+' の手番。')})};
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=mode===b.dataset.mode?null:b.dataset.mode;render()});
+$('buyDev').onclick=()=>transact(()=>{const s=room.state,p=s.players[meIndex()];if(!s.devDeck.length||!costOK(p,COST.dev))throw Error('カード購入には羊毛・小麦・鉱石が1枚ずつ必要。');pay(p,COST.dev);p.dev.push(s.devDeck.pop());log(p.name+' が発展カードを購入。')});
+$('playDev').onclick=()=>transact(()=>{const s=room.state,p=s.players[meIndex()];const i=p.dev.findIndex(c=>c!=='point');if(i<0)throw Error('使えるカードがないよ。');const c=p.dev.splice(i,1)[0];if(c==='knight'){p.knights++;s.robberMode=true;log('騎士カード！盗賊を移動してね。')}else if(c==='road'){mode='freeRoad';s.freeRoads=2;log('道路建設カード：接続する道路を2本タップ。')}else if(c==='year'){for(let n=0;n<2;n++){const ri=prompt('獲得する資源番号 1木材 2レンガ 3羊毛 4小麦 5鉱石');const r=Number(ri)-1;if(r>=0&&r<5)p.res[r]++}log('豊作カードを使用。')}bonusCheck()});
+$('bankTrade').onclick=()=>{tradeOpen=!tradeOpen;$('tradePanel').classList.toggle('hidden',!tradeOpen)};
+$('tradeDo').onclick=()=>transact(()=>{const p=room.state.players[meIndex()],a=+$('giveResource').value,b=+$('getResource').value;if(a===b||p.res[a]<4)throw Error('違う資源を選び、交換する資源を4枚持ってね。');p.res[a]-=4;p.res[b]++;log('銀行で資源を4:1交換。');tradeOpen=false});
+$('copyCode').onclick=()=>navigator.clipboard?.writeText(room.code).then(()=>msg('招待コードをコピーしたよ: '+room.code)).catch(()=>msg('招待コード: '+room.code));
+$('copyInvite').onclick=()=>{const url=location.href.split('?')[0]+'?room='+room.code;navigator.clipboard?.writeText(url).then(()=>msg('招待URLをコピーしたよ')).catch(()=>prompt('このURLを友達に送ってね',url))};
+$('leaveRoom').onclick=async()=>{if(channel)await sb.removeChannel(channel);room=null;me=null;mode=null;$('game').classList.add('hidden');$('setup').classList.remove('hidden');$('copyInvite').classList.add('hidden')};
+const codeFromUrl=new URLSearchParams(location.search).get('room');if(codeFromUrl)$('roomCode').value=codeFromUrl;
+})();
+</script>
+</body></html>

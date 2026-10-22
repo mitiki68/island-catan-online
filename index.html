@@ -39,8 +39,21 @@ const RES=['木材','レンガ','羊毛','小麦','鉱石'],EM=['🌲','🧱','�
 const TYPES=['forest','hill','pasture','field','mountain','desert'],EMO={forest:'🌲',hill:'🧱',pasture:'🐑',field:'🌾',mountain:'⛰️',desert:'🏜️'};
 const COLORS=['#38a169','#e45e56','#e4ad36','#6698e8'],PN=['木材','レンガ','羊毛','小麦','鉱石'];
 const TILECOL={forest:'#8fbf8b',hill:'#d99a82',pasture:'#c7d99c',field:'#ead17d',mountain:'#a9bfce',desert:'#e9c99a'};
-const COST={road:[1,1,0,0,0],settlement:[1,1,1,1,0],city:[0,0,0,2,3],dev:[0,0,1,1,1]};
+const COST={road:[1,1,0,0,0],settlement:[1,1,1,1,0],city:[0,0,0,2,3],dev:[0,0,1,1,1]}
 let sb=null,room=null,me=null,channel=null,mode=null,tradeOpen=false;
+
+function playerStorageKey(code){
+  return 'island_catan_player_' + code;
+}
+
+function getPlayerId(code){
+  let id = localStorage.getItem(playerStorageKey(code));
+  if(!id){
+    id = crypto.randomUUID();
+    localStorage.setItem(playerStorageKey(code), id);
+  }
+  return id;
+}
 let config={
   url:'https://ysltqputfdhywvuexvaz.supabase.co',
   key:'sb_publishable_7wBcpH3kvH1GK9Uy7TB7XQ_vrW0ZgB_'

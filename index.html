@@ -114,15 +114,58 @@ async function createRoom(){
  const {data,error}=await sb.from('catan_rooms').insert({code,host_id:me,state}).select().single();if(error){$('setupMsg').textContent='部屋作成エラー: '+error.message;return}room=data;enterRoom();await subscribe();
 }
 function scoreStateVertex(s,v){return v.tiles.reduce((sum,ti)=>{let n=s.tiles[ti].num;return sum+(n?6-Math.abs(7-n):0)},0)}
+
 async function joinRoom(){
- if(!cfg())return;const code=$('roomCode').value.trim().toUpperCase();if(code.length<4){$('setupMsg').textContent='招待コードを入力してね。';return}
- const {data,error}=await sb.from('catan_rooms').select('*').eq('code',code).maybeSingle();if(error||!data){$('setupMsg').textContent='部屋が見つからないよ。コードを確認してね。';return}
- const name=$('playerName').value.trim()||'プレイヤー';const idx=data.state.players.findIndex(p=>!p.id);if(idx<0){$('setupMsg').textContent='この部屋は満員だよ（最大4人）。';return}
- me=crypto.randomUUID();data.state.players[idx].id=me;data.state.players[idx].name=name;
- const {data:updated,error:err}=await sb.from('catan_rooms').update({state:data.state}).eq('code',code).eq('updated_at',data.updated_at).select().maybeSingle();
- if(err||!updated){$('setupMsg').textContent='参加に失敗したよ。もう一度試してね。';return}
- room=updated;enterRoom();await subscribe();
+  if(!cfg())return;
+
+  const code=$('roomCode').value.trim().toUpperCase();
+  if(code.length<4){
+    $('setupMsg').textContent='招待コードを入力してね。';
+    return;
+  }
+
+  const {data,error}=await sb.from('catan_rooms')
+    .select('*').eq('code',code).maybeSingle();
+
+  if(error||!data){
+    $('setupMsg').textContent='部屋が見つからないよ。コードを確認してね。';
+    return;
+  }
+
+  const name=$('playerName').value.trim()||'プレイヤー';
+  me=getPlayerId(code);
+
+  // この端末のIDがすでに登録されていれば、その枠を再利用
+  let idx=data.state.players.findIndex(p=>p.id===me);
+
+  if(idx<0){
+    idx=data.state.players.findIndex(p=>!p.id);
+    if(idx<0){
+      $('setupMsg').textContent='この部屋は満員だよ（最大4人）。';
+      return;
+    }
+
+    data.state.players[idx].id=me;
+  }
+
+  data.state.players[idx].name=name;
+
+  const {data:updated,error:err}=await sb.from('catan_rooms')
+    .update({state:data.state})
+    .eq('code',code)
+    .eq('updated_at',data.updated_at)
+    .select().maybeSingle();
+
+  if(err||!updated){
+    $('setupMsg').textContent='参加に失敗したよ。もう一度試してね。部屋を再読み込みして再試行してね。';
+    return;
+  }
+
+  room=updated;
+  enterRoom();
+  await subscribe();
 }
+
 function enterRoom(){$('setup').classList.add('hidden');$('game').classList.remove('hidden');$('roomLabel').textContent=room.code;$('copyInvite').classList.remove('hidden');$('giveResource').innerHTML=RES.map((x,i)=>`<option value="${i}">${EM[i]} ${x}</option>`).join('');$('getResource').innerHTML=$('giveResource').innerHTML;$('getResource').value='1';render();msg('参加したよ。ホストがゲームを開始するまで待ってね。')}
 async function subscribe(){if(channel)await sb.removeChannel(channel);channel=sb.channel('room-'+room.code).on('postgres_changes',{event:'UPDATE',schema:'public',table:'catan_rooms',filter:'code=eq.'+room.code},payload=>{if(payload.new&&payload.new.state){room=payload.new;render()}}).subscribe(status=>{if(status==='SUBSCRIBED')msg('オンライン同期中')});}
 function renderBoard(){const s=room.state,svg=$('board');let out='';s.tiles.forEach(t=>{const pts=[];for(let k=0;k<6;k++){const a=Math.PI/180*(60*k-30);pts.push((t.cx+42*Math.cos(a))+','+(t.cy+42*Math.sin(a)))}out+=`<polygon points="${pts.join(' ')}" fill="${TILECOL[t.type]}" stroke="#f5f0df" stroke-width="2"/>`;out+=`<text x="${t.cx}" y="${t.cy-6}" text-anchor="middle" font-size="16">${EMO[t.type]}</text>`;if(t.num)out+=`<circle cx="${t.cx}" cy="${t.cy+12}" r="10" fill="${[6,8].includes(t.num)?'#e5a99c':'#fff8e7'}"/><text x="${t.cx}" y="${t.cy+16}" text-anchor="middle" font-size="11" font-weight="bold" fill="#352d26">${t.num}</text>`;if(t.robber)out+=`<text x="${t.cx}" y="${t.cy+1}" text-anchor="middle" font-size="20">🦹</text>`});

@@ -41,8 +41,19 @@ const COLORS=['#38a169','#e45e56','#e4ad36','#6698e8'],PN=['木材','レンガ',
 const TILECOL={forest:'#8fbf8b',hill:'#d99a82',pasture:'#c7d99c',field:'#ead17d',mountain:'#a9bfce',desert:'#e9c99a'};
 const COST={road:[1,1,0,0,0],settlement:[1,1,1,1,0],city:[0,0,0,2,3],dev:[0,0,1,1,1]};
 let sb=null,room=null,me=null,channel=null,mode=null,tradeOpen=false;
-let config={url:localStorage.getItem('catan_sb_url')||'',key:localStorage.getItem('catan_sb_key')||''};
-function cfg(){if(!config.url||!config.key){const u=prompt('Supabase Project URL（https://....supabase.co）');if(!u)return false;const k=prompt('Supabase anon/public key');if(!k)return false;config={url:u.trim(),key:k.trim()};localStorage.setItem('catan_sb_url',config.url);localStorage.setItem('catan_sb_key',config.key)}try{sb=window.supabase.createClient(config.url,config.key);return true}catch(e){alert('設定を確認してね: '+e.message);return false}}
+let config={
+  url:'https://ysltqputfdhywvuexvaz.supabase.co',
+  key:'sb_publishable_7wBcpH3kvH1GK9Uy7TB7XQ_vrW0ZgB_'
+};
+function cfg(){
+  try {
+    sb = window.supabase.createClient(config.url, config.key);
+    return true;
+  } catch(e) {
+    alert('Supabaseの設定を確認してね: ' + e.message);
+    return false;
+  }
+}
 function msg(s){$('gameMsg').textContent=s}
 function log(s){if(!room)return;room.state.log=[s,...(room.state.log||[])].slice(0,30)}
 function makeBoard(){

@@ -241,6 +241,9 @@ $('tradeDo').onclick=()=>transact(()=>{const p=room.state.players[meIndex()],a=+
 $('copyCode').onclick=()=>navigator.clipboard?.writeText(room.code).then(()=>msg('招待コードをコピーしたよ: '+room.code)).catch(()=>msg('招待コード: '+room.code));
 $('copyInvite').onclick=()=>{const url=location.href.split('?')[0]+'?room='+room.code;navigator.clipboard?.writeText(url).then(()=>msg('招待URLをコピーしたよ')).catch(()=>prompt('このURLを友達に送ってね',url))};
 $('leaveRoom').onclick=async()=>{if(channel)await sb.removeChannel(channel);room=null;me=null;mode=null;$('game').classList.add('hidden');$('setup').classList.remove('hidden');$('copyInvite').classList.add('hidden')};
+$('createRoom').onclick = createRoom;
+$('joinRoom').onclick = joinRoom;
+                  
 const codeFromUrl=new URLSearchParams(location.search).get('room');if(codeFromUrl)$('roomCode').value=codeFromUrl;
 })();
 </script>

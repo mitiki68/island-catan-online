@@ -32,6 +32,19 @@ input,button,select{font:inherit;border-radius:10px;border:1px solid var(--line)
 <div class="muted" style="padding:8px 2px">試作版：オンライン同期の基本実装です。公式ルール完全再現ではありません。共有ルームの書き込み権限はデモ用のため、本格公開前にサーバー側検証を追加してください。</div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+window.addEventListener('error', function(event) {
+  alert('JavaScriptエラー: ' + event.message +
+        ' / 行番号: ' + event.lineno);
+});
+
+window.addEventListener('unhandledrejection', function(event) {
+  alert('処理エラー: ' +
+        (event.reason?.message || event.reason));
+});
+</script>
+
 <script>
 (() => {
 const $=id=>document.getElementById(id);

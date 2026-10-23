@@ -77,6 +77,15 @@ function buildRoad(e,p,free=false){const s=room.state;if(!canRoad(e,p)||(!free&&
 function buildSettle(v,p,free=false){const s=room.state;if(!canSettle(v,p)||(!free&&!costOK(s.players[p],COST.settlement)))return false;if(!free)pay(s.players[p],COST.settlement);s.vertices[v].building={owner:p,type:'settlement'};s.players[p].settlements.push(v);updatePoints(p);return true}
 function buildCity(v,p){const s=room.state;if(!canCity(v,p)||!costOK(s.players[p],COST.city))return false;pay(s.players[p],COST.city);s.vertices[v].building.type='city';s.players[p].settlements=s.players[p].settlements.filter(x=>x!==v);s.players[p].cities.push(v);updatePoints(p);return true}
 function resourceProduction(d){const s=room.state;s.tiles.forEach(t=>{if(t.num!==d||t.robber)return;const ri={forest:0,hill:1,pasture:2,field:3,mountain:4}[t.type];if(ri===undefined)return;t.vs.forEach(vi=>{const b=s.vertices[vi].building;if(b)s.players[b.owner].res[ri]+=b.type==='city'?2:1})})}
+function giveStartingResources(v,p){
+ const s=room.state;
+ const vertex=s.vertices[v];
+ s.tiles.forEach(t=>{
+  if(!t.vs.includes(v)||t.robber)return;
+  const ri={forest:0,hill:1,pasture:2,field:3,mountain:4}[t.type];
+  if(ri!==undefined)s.players[p].res[ri]++;
+ });
+}
 function moveRobber(tid,p){const s=room.state;s.tiles.forEach(t=>t.robber=false);s.tiles[tid].robber=true;s.robberMode=false;const victims=[...new Set(s.tiles[tid].vs.map(v=>s.vertices[v].building).filter(b=>b&&b.owner!==p).map(b=>b.owner))].filter(i=>total(s.players[i])>0);if(victims.length){const v=victims[Math.floor(Math.random()*victims.length)],pool=[];s.players[v].res.forEach((n,i)=>{for(let j=0;j<n;j++)pool.push(i)});if(pool.length){const r=pool[Math.floor(Math.random()*pool.length)];s.players[v].res[r]--;s.players[p].res[r]++;log(s.players[p].name+' が '+s.players[v].name+' から資源を奪った')}}log('盗賊を移動した。')}
 function rollDice(){const s=room.state;if(s.turn!==meIndex()||s.rolled||s.phase!=='playing')return;const d=1+Math.floor(Math.random()*6)+1+Math.floor(Math.random()*6);s.dice=String(d);s.rolled=true;s.usedDev=false;if(d===7){s.players.forEach(p=>{if(total(p)>7){let n=Math.floor(total(p)/2);while(n--)dropRandom(p)}});s.robberMode=true;log('7！盗賊を移動してね。')}else{resourceProduction(d);log('出目 '+d+'：資源を生産したよ。')} }
 function dropRandom(p){let pool=[];p.res.forEach((n,i)=>{for(let j=0;j<n;j++)pool.push(i)});if(pool.length)p.res[pool[Math.floor(Math.random()*pool.length)]]--}
@@ -86,9 +95,14 @@ async function save(){const {error}=await sb.from('catan_rooms').update({state:r
 async function transact(fn){if(!room||room.state.winner!==null)return;const idx=meIndex();if(idx<0||room.state.turn!==idx)return;try{fn();bonusCheck();checkWin();await save()}catch(e){msg('操作エラー: '+e.message)}}
 async function createRoom(){
  if(!cfg())return;const name=$('playerName').value.trim()||'プレイヤー';me=crypto.randomUUID();let state=newState();state.players[0]={...state.players[0],id:me,name};state.host=me;
- // Host starts with one settlement and road as a tutorial-friendly initial state.
- const p=state.players[0];const v=state.vertices.filter(v=>v.adj.every(n=>!state.vertices[n].building)).sort((a,b)=>scoreStateVertex(state,b)-scoreStateVertex(state,a))[0];if(v){v.building={owner:0,type:'settlement'};p.settlements.push(v.id);p.points=1;const e=v.edges.find(e=>state.edges[e].owner===null);if(e!==undefined){state.edges[e].owner=0;p.roads.push(e)}}
- for(let i=0;i<4;i++)state.players[i].res=[1,1,1,1,0];
+ state.setupOrder=[];
+ state.setupIndex=0;
+ state.setupStep='settlement';
+ state.phase='setup';
+ state.players.forEach(p=>p.res=[0,0,0,0,0]);
+ const active=state.players.filter(p=>p.id);
+ for(let i=active.length-1;i>=0;i--)state.setupOrder.push(state.players.indexOf(active[i]));
+ for(let i=0;i<active.length;i++)state.setupOrder.push(state.players.indexOf(active[i]));
  let code;for(let tries=0;tries<5;tries++){code=Math.random().toString(36).slice(2,8).toUpperCase();const {data}=await sb.from('catan_rooms').select('code').eq('code',code).maybeSingle();if(!data)break}
  const {data,error}=await sb.from('catan_rooms').insert({code,host_id:me,state}).select().single();if(error){$('setupMsg').textContent='部屋作成エラー: '+error.message;return}room=data;setPlayerId(code,me);enterRoom();await subscribe();
 }
@@ -107,18 +121,97 @@ async function joinRoom(){
 function enterRoom(){$('setup').classList.add('hidden');$('game').classList.remove('hidden');$('roomLabel').textContent=room.code;$('copyInvite').classList.remove('hidden');$('giveResource').innerHTML=RES.map((x,i)=>`<option value="${i}">${EM[i]} ${x}</option>`).join('');$('getResource').innerHTML=$('giveResource').innerHTML;$('getResource').value='1';render();msg('参加したよ。ホストがゲームを開始するまで待ってね。')}
 async function subscribe(){if(channel)await sb.removeChannel(channel);channel=sb.channel('room-'+room.code).on('postgres_changes',{event:'UPDATE',schema:'public',table:'catan_rooms',filter:'code=eq.'+room.code},payload=>{if(payload.new&&payload.new.state){room=payload.new;render()}}).subscribe(status=>{if(status==='SUBSCRIBED')msg('オンライン同期中')});}
 function renderBoard(){const s=room.state,svg=$('board');let out='';s.tiles.forEach(t=>{const pts=[];for(let k=0;k<6;k++){const a=Math.PI/180*(60*k-30);pts.push((t.cx+42*Math.cos(a))+','+(t.cy+42*Math.sin(a)))}out+=`<polygon points="${pts.join(' ')}" fill="${TILECOL[t.type]}" stroke="#f5f0df" stroke-width="2"/>`;out+=`<text x="${t.cx}" y="${t.cy-6}" text-anchor="middle" font-size="16">${EMO[t.type]}</text>`;if(t.num)out+=`<circle cx="${t.cx}" cy="${t.cy+12}" r="10" fill="${[6,8].includes(t.num)?'#e5a99c':'#fff8e7'}"/><text x="${t.cx}" y="${t.cy+16}" text-anchor="middle" font-size="11" font-weight="bold" fill="#352d26">${t.num}</text>`;if(t.robber)out+=`<text x="${t.cx}" y="${t.cy+1}" text-anchor="middle" font-size="20">🦹</text>`});
- s.edges.forEach(e=>{const a=s.vertices[e.a],b=s.vertices[e.b],legal=s.turn===meIndex()&&s.rolled&&(mode==='road'||mode==='freeRoad')&&canRoad(e.id,meIndex());out+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${e.owner!==null?s.players[e.owner].color:(legal?'#1678ff':'#f7f2e4')}" stroke-width="${e.owner!==null?5:(legal?5:2)}" stroke-linecap="round" data-edge="${e.id}"/>`});
- s.vertices.forEach(v=>{const b=v.building,legal=s.turn===meIndex()&&s.rolled&&((mode==='settlement'&&canSettle(v.id,meIndex()))||(mode==='city'&&canCity(v.id,meIndex())));if(b){const c=s.players[b.owner].color;if(b.type==='city')out+=`<rect x="${v.x-7}" y="${v.y-7}" width="14" height="14" rx="2" fill="${c}" stroke="#fff" stroke-width="1.5"/>`;else out+=`<path d="M${v.x-7},${v.y+5} L${v.x-7},${v.y-3} L${v.x},${v.y-9} L${v.x+7},${v.y-3} L${v.x+7},${v.y+5} Z" fill="${c}" stroke="#fff" stroke-width="1.4"/>`}else out+=`<circle cx="${v.x}" cy="${v.y}" r="${legal?7:3}" fill="${legal?'#1678ff':'#fff8e5'}" stroke="${legal?'white':'#9a8b71'}" stroke-width="1.5"/>`});
+ s.edges.forEach(e=>{const a=s.vertices[e.a],b=s.vertices[e.b],legal=s.turn===meIndex()&&((s.phase==='setup'&&s.setupOrder[s.setupIndex]===meIndex()&&s.setupStep==='road')||(s.phase==='playing'&&s.rolled&&(mode==='road'||mode==='freeRoad')))&&canRoad(e.id,meIndex());out+=`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${e.owner!==null?s.players[e.owner].color:(legal?'#1678ff':'#f7f2e4')}" stroke-width="${e.owner!==null?5:(legal?5:2)}" stroke-linecap="round" data-edge="${e.id}"/>`});
+ s.vertices.forEach(v=>{const b=v.building,legal=s.turn===meIndex()&&((s.phase==='setup'&&s.setupOrder[s.setupIndex]===meIndex()&&s.setupStep==='settlement'&&canSettle(v.id,meIndex()))||(s.phase==='playing'&&s.rolled&&((mode==='settlement'&&canSettle(v.id,meIndex()))||(mode==='city'&&canCity(v.id,meIndex())))));if(b){const c=s.players[b.owner].color;if(b.type==='city')out+=`<rect x="${v.x-7}" y="${v.y-7}" width="14" height="14" rx="2" fill="${c}" stroke="#fff" stroke-width="1.5"/>`;else out+=`<path d="M${v.x-7},${v.y+5} L${v.x-7},${v.y-3} L${v.x},${v.y-9} L${v.x+7},${v.y-3} L${v.x+7},${v.y+5} Z" fill="${c}" stroke="#fff" stroke-width="1.4"/>`}else out+=`<circle cx="${v.x}" cy="${v.y}" r="${legal?7:3}" fill="${legal?'#1678ff':'#fff8e5'}" stroke="${legal?'white':'#9a8b71'}" stroke-width="1.5"/>`});
  svg.innerHTML=out;
  svg.querySelectorAll('[data-edge]').forEach(el=>el.addEventListener('click',()=>onEdge(+el.dataset.edge)));
  s.vertices.forEach(v=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',v.x);c.setAttribute('cy',v.y);c.setAttribute('r',10);c.setAttribute('fill','transparent');c.style.cursor='pointer';c.addEventListener('click',()=>onVertex(v.id));svg.appendChild(c)});
  s.tiles.forEach(t=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',t.cx);c.setAttribute('cy',t.cy);c.setAttribute('r',26);c.setAttribute('fill','transparent');c.addEventListener('click',()=>{if(s.robberMode&&s.turn===meIndex())transact(()=>moveRobber(t.id,meIndex()))});svg.appendChild(c)});
 }
-async function onEdge(e){const idx=meIndex();if(idx<0||room.state.turn!==idx||!room.state.rolled)return;await transact(()=>{if(mode==='road'){if(!buildRoad(e,idx))throw Error('そこには道路を建設できないか、資源が足りないよ。');log('道路を建設した。');mode=null}else msg('道路を建設するモードを選んでね。')})}
-async function onVertex(v){const idx=meIndex();if(idx<0||room.state.turn!==idx||!room.state.rolled)return;await transact(()=>{if(mode==='settlement'){if(!buildSettle(v,idx))throw Error('そこには開拓地を建設できないよ。');log('開拓地を建設した。');mode=null}else if(mode==='city'){if(!buildCity(v,idx))throw Error('都市には小麦2・鉱石3が必要。');log('都市を建設した。');mode=null}else msg('建設モードを選んでね。')})}
+async function onEdge(e){
+ const idx=meIndex();
+ if(idx<0||!room)return;
+ if(room.state.phase==='setup'){
+  if(room.state.setupOrder[room.state.setupIndex]!==idx)return;
+  if(room.state.setupStep!=='road')return;
+  await transact(()=>{
+   const s=room.state;
+   const p=idx;
+   if(!buildRoad(e,p,true))throw Error('その場所には道路を置けないよ。');
+   s.setupIndex++;
+   if(s.setupIndex>=s.setupOrder.length){
+ s.phase='playing';
+ s.turn=s.setupOrder[0];
+ s.rolled=false;
+ s.setupStep=null;
+ s.setupOrder=[];
+ s.setupIndex=0;
+ log('初期配置完了！ゲーム開始！');
+}else{
+ s.setupStep='settlement';
+ log('道路を置いたよ。次のプレイヤーの開拓地だよ。');
+}
+async function onVertex(v){
+ const idx=meIndex();
+ if(idx<0||!room)return;
+
+ if(room.state.phase==='setup'){
+  if(room.state.setupOrder[room.state.setupIndex]!==idx)return;
+  if(room.state.setupStep!=='settlement')return;
+
+  await transact(()=>{
+   const s=room.state;
+   if(!buildSettle(v,idx,true))throw Error('そこには開拓地を置けないよ。');
+   if(s.players[idx].settlements.length===2){
+ giveStartingResources(v,idx);
+ log('初期配置の資源を受け取ったよ。');
+}
+
+   s.setupStep='road';
+   mode=null;
+   log('開拓地を置いたよ。続けて道路を置こう。');
+  });
+  return;
+ }
+
+ if(room.state.turn!==idx||!room.state.rolled)return;
+
+ await transact(()=>{
+  if(mode==='settlement'){
+   if(!buildSettle(v,idx))throw Error('そこには開拓地を建設できないよ。');
+   log('開拓地を建設した。');
+   mode=null;
+  }else if(mode==='city'){
+   if(!buildCity(v,idx))throw Error('都市には小麦2・鉱石3が必要。');
+   log('都市を建設した。');
+   mode=null;
+  }else{
+   msg('建設モードを選んでね。');
+  }
+ });
+}
 function render(){if(!room)return;const s=room.state,idx=meIndex(),p=s.players[idx];$('roomLabel').textContent=room.code;$('phaseLabel').textContent=({lobby:'参加待ち',playing:'対戦中',over:'ゲーム終了'})[s.phase]||s.phase;$('turnLabel').textContent=s.winner!==null?'勝者：'+s.players[s.winner].name:(s.turn===idx?'あなたの手番':'手番：'+(s.players[s.turn]?.name||'—'));$('lobbyMsg').textContent=s.players.filter(x=>x.id).length+' / 4 人が参加中。'+(s.phase==='lobby'?'ホストがゲームを開始できるよ。':'');$('startGame').disabled=s.host!==me||s.phase!=='lobby'||s.players.filter(x=>x.id).length<2;$('startGame').textContent=s.phase==='lobby'?'ゲーム開始（ホスト）':'ゲーム開始済み';$('roll').disabled=s.turn!==idx||s.rolled||s.phase!=='playing'||s.winner!==null;$('endTurn').disabled=s.turn!==idx||!s.rolled||s.phase!=='playing';$('resources').innerHTML=RES.map((n,i)=>`<div class="res">${EM[i]} ${n}<strong>${p?p.res[i]:0}</strong></div>`).join('');$('handHint').textContent=p?'資源 '+total(p)+' 枚 · 勝利点 '+p.points+' / 10':'参加情報を読み込み中';$('players').innerHTML=s.players.map((x,i)=>`<div class="player ${i===s.turn?'current':''}"><div style="display:flex;gap:7px;align-items:center"><span style="width:11px;height:11px;border-radius:50%;background:${x.color};display:inline-block"></span><strong style="overflow-wrap:anywhere">${x.name}</strong></div><div class="muted">${x.id?'参加済み':'空席'} · ${x.points}点</div><div class="muted">🏠 ${x.settlements.length} 🏙️ ${x.cities.length} 🛤️ ${x.roads.length}</div></div>`).join('');$('log').innerHTML=(s.log||[]).map(x=>`<div>• ${String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`).join('');$('gameMsg').textContent=s.winner!==null?'ゲーム終了！ '+s.players[s.winner].name+' の勝利！':s.robberMode&&s.turn===idx?'盗賊を移動する地形をタップしてね。':s.turn===idx?(s.rolled?'建設や交換をして、手番を終了しよう。':'サイコロを振ってね。'):'他のプレイヤーの手番だよ。';$('tradePanel').classList.toggle('hidden',!tradeOpen);document.querySelectorAll('[data-mode]').forEach(b=>{b.classList.toggle('primary',mode===b.dataset.mode);b.disabled=s.turn!==idx||!s.rolled||s.phase!=='playing'||s.winner!==null});$('buyDev').disabled=s.turn!==idx||!s.rolled||!costOK(p||{res:[]},COST.dev)||!s.devDeck.length;$('playDev').disabled=s.turn!==idx||!s.rolled||!p||!p.dev.some(c=>c!=='point');renderBoard()}
 $('createRoom').onclick=createRoom;$('joinRoom').onclick=joinRoom;$('roomCode').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,''));
-$('startGame').onclick=async()=>{if(!room||room.state.host!==me||room.state.phase!=='lobby')return;const s=room.state;s.phase='playing';log('ゲーム開始！最初のプレイヤーからサイコロを振ろう。');await save()};
+$('startGame').onclick=async()=>{
+ if(!room||room.state.host!==me||room.state.phase!=='lobby')return;
+ const s=room.state;
+ const active=s.players.map((p,i)=>({p,i})).filter(x=>x.p.id);
+ for(let i=active.length-1;i>0;i--){
+  const j=Math.floor(Math.random()*(i+1));
+  [active[i],active[j]]=[active[j],active[i]];
+ }
+ const players=active.map(x=>x.i);
+ s.setupOrder=[];
+ for(let i=0;i<players.length;i++)s.setupOrder.push(players[i]);
+ for(let i=players.length-1;i>=0;i--)s.setupOrder.push(players[i]);
+ s.setupIndex=0;
+ s.setupStep='settlement';
+ s.phase='setup';
+ s.rolled=false;
+ s.dice='—';
+ log('初期配置開始！順番に開拓地と道を置こう。');
+ await save();
+};
 $('roll').onclick=()=>transact(()=>rollDice());
 $('endTurn').onclick=async()=>{const s=room.state,idx=meIndex();if(s.turn!==idx||!s.rolled)return;await transact(()=>{s.turn=(s.turn+1)%s.players.length;let guard=0;while(!s.players[s.turn].id&&guard++<4)s.turn=(s.turn+1)%s.players.length;s.rolled=false;s.robberMode=false;mode=null;log(s.players[s.turn].name+' の手番。')})};
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=mode===b.dataset.mode?null:b.dataset.mode;render()});

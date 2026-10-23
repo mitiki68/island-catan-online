@@ -247,8 +247,35 @@ $('startGame').onclick = async () => {
 $('roll').onclick=()=>transact(()=>rollDice());
 $('endTurn').onclick=async()=>{const s=room.state,idx=meIndex();if(s.turn!==idx||!s.rolled)return;await transact(()=>{s.turn=(s.turn+1)%s.players.length;let guard=0;while(!s.players[s.turn].id&&guard++<4)s.turn=(s.turn+1)%s.players.length;s.rolled=false;s.robberMode=false;mode=null;log(s.players[s.turn].name+' の手番。')})};
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=mode===b.dataset.mode?null:b.dataset.mode;render()});
-$('buyDev').onclick=()=>transact(()=>{const s=room.state,p=s.players[meIndex()];if(!s.devDeck.length||!costOK(p,COST.dev))throw Error('カード購入には羊毛・小麦・鉱石が1枚ずつ必要。');pay(p,COST.dev);p.dev.push(s.devDeck.pop());log(p.name+' が発展カードを購入。')});
-$('playDev').onclick=()=>transact(()=>{const s=room.state,p=s.players[meIndex()];const i=p.dev.findIndex(c=>c!=='point');if(i<0)throw Error('使えるカードがないよ。');const c=p.dev.splice(i,1)[0];if(c==='knight'){p.knights++;s.robberMode=true;log('騎士カード！盗賊を移動してね。')}else if(c==='road'){mode='freeRoad';s.freeRoads=2;log('道路建設カード：接続する道路を2本タップ。')}else if(c==='year'){for(let n=0;n<2;n++){const ri=prompt('獲得する資源番号 1木材 2レンガ 3羊毛 4小麦 5鉱石');const r=Number(ri)-1;if(r>=0&&r<5)p.res[r]++}log('豊作カードを使用。')}bonusCheck()});
+$('buyDev').onclick=()=>transact(()=>{const s=room.state,p=s.players[meIndex()];if(!s.devDeck.length||!costOK(p,COST.dev))throw Error('カード購入には羊毛・小麦・鉱石が1枚ずつ必要。');pay(p,COST.dev);p.dev.push(s.devDeck.pop());log(p.name+' が発展カードを購入。')})
+$('playDev').onclick = () => transact(() => {
+  const s = room.state;
+  const p = s.players[meIndex()];
+  const i = p.dev.findIndex(c => c !== 'point');
+
+  if (i < 0) throw Error('使えるカードがないよ。');
+
+  const c = p.dev.splice(i, 1)[0];
+
+  if (c === 'knight') {
+    p.knights++;
+    s.robberMode = true;
+    log('騎士カード！盗賊を移動してね。');
+  } else if (c === 'road') {
+    mode = 'freeRoad';
+    s.freeRoads = 2;
+    log('道路建設カード：接続する道路を2本タップ。');
+  } else if (c === 'year') {
+    for (let n = 0; n < 2; n++) {
+      const ri = prompt('獲得する資源番号 1木材 2レンガ 3羊毛 4小麦 5鉱石');
+      const r = Number(ri) - 1;
+      if (r >= 0 && r < 5) p.res[r]++;
+    }
+    log('豊作カードを使用。');
+  }
+
+  bonusCheck();
+});
 $('bankTrade').onclick=()=>{tradeOpen=!tradeOpen;$('tradePanel').classList.toggle('hidden',!tradeOpen)};
 $('tradeDo').onclick=()=>transact(()=>{const p=room.state.players[meIndex()],a=+$('giveResource').value,b=+$('getResource').value;if(a===b||p.res[a]<4)throw Error('違う資源を選び、交換する資源を4枚持ってね。');p.res[a]-=4;p.res[b]++;log('銀行で資源を4:1交換。');tradeOpen=false});
 $('copyCode').onclick=()=>navigator.clipboard?.writeText(room.code).then(()=>msg('招待コードをコピーしたよ: '+room.code)).catch(()=>msg('招待コード: '+room.code));
